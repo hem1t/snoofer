@@ -19,7 +19,7 @@ pub fn MainApp(cx: Scope) -> Element {
 
         async move {
             let mut parser = Parser {};
-            let mut receiver = parser.parse().await;
+            let mut receiver = parser.parse_from_device().await;
             while let Some(pac) = receiver.recv().await {
                 parsed_packets.write().push(pac);
             }
