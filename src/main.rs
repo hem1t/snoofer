@@ -8,5 +8,5 @@ fn main() {
 }
 
 fn App(cx: Scope) -> Element {
-    render!(looks::MainApp {})
+    render!("Hello", looks::MainApp {})
 }

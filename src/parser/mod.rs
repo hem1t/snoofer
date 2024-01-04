@@ -1,11 +1,14 @@
 #![allow(deadcode)]
 use std::{
+    future::Future,
+    io,
     path::Path,
-    sync::{mpsc, Arc, Mutex},
     thread,
 };
 
-use pcap::{Activated, Active, Capture, Device, Offline, State};
+use tokio::sync::{mpsc, mpsc::Receiver};
+
+use pcap::{Activated, Active, Capture, Device, PacketCodec, Savefile};
 
 use pktparse::{
     arp::ArpPacket,
@@ -18,45 +21,20 @@ use pktparse::{
     udp::{self, UdpHeader},
 };
 
-pub struct Parser<T: Activated + ?Sized> {
-    packets: Vec<ParsedPacket>,
-    capture: Capture<T>,
-}
+pub struct Parser {}
 
-impl Parser<Active> {
-    pub fn new_for_device() -> Self {
-        Self {
-            packets: Vec::new(),
-            capture: Capture::from_device(Device::lookup().unwrap().unwrap())
-                .unwrap()
-                .open()
-                .unwrap(),
-        }
-    }
-
-    pub fn parse(&mut self, mut limit: usize) {
-        // let (tx, rx) = mpsc::channel();
-        // let packets = self.packets.clone();
-        // let capture = self.capture.clone();
-
-        // thread::spawn(move || {
-        //     while let Ok(pckt) = capture.next_packet() {
-        //         packets
-        //             .lock()
-        //             .unwrap()
-        //             .push(Packet::from_packet(pckt).unwrap());
-        //     }
-        // });
-        while let Ok(pckt) = self.capture.next_packet() {
-            if limit == 0 {
-                break;
+impl Parser {
+    pub async fn parse(&mut self) -> Receiver<ParsedPacket>{
+        let mut capture = Capture::from_device("wlo1").unwrap().open().unwrap();
+        let (tx, rx) = mpsc::channel::<ParsedPacket>(10);
+        tokio::spawn(async move {
+            while let Ok(pac) = capture.next_packet() {
+                if let Ok(pac) = ParsedPacket::from_packet(pac) {
+                    let _ = tx.send(pac).await;
+                }
             }
-            limit -= 1;
-
-            if let Ok(parsed_pckt) = ParsedPacket::from_packet(pckt) {
-                self.packets.push(parsed_pckt);
-            }
-        }
+        });
+        rx
     }
 
     pub fn save_to_file(&mut self, path: &Path) {
@@ -64,7 +42,7 @@ impl Parser<Active> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PacketHeader {
     ICMP(IcmpHeader),
     Tcp(TcpHeader),
@@ -75,23 +53,43 @@ pub enum PacketHeader {
     Arp(ArpPacket),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ParsedPacket {
     src_ip: String,
     src_port: String,
     dest_ip: String,
     dest_port: String,
-    protocol: Vec<PacketHeader>,
+    layers: Vec<PacketHeader>,
     length: u32,
     ts: String,
 }
 
+impl PacketCodec for ParsedPacket {
+    type Item = ParsedPacket;
+
+    fn decode(&mut self, packet: pcap::Packet) -> Self::Item {
+        ParsedPacket::from_packet(packet).unwrap()
+    }
+}
+
 impl ParsedPacket {
+    pub fn new() -> Self {
+        ParsedPacket {
+            src_ip: String::new(),
+            src_port: String::new(),
+            dest_ip: String::new(),
+            dest_port: String::new(),
+            layers: Vec::new(),
+            length: 0,
+            ts: String::new(),
+        }
+    }
+
     pub fn from_packet(packet: pcap::Packet) -> Result<Self, ()> {
         Ok(ParsedPacket {
             length: packet.header.len,
             ts: format!("{}.{}", packet.header.ts.tv_sec, packet.header.ts.tv_usec),
-            protocol: Vec::new(),
+            layers: Vec::new(),
             src_ip: String::new(),
             src_port: String::new(),
             dest_ip: String::new(),
@@ -102,7 +100,7 @@ impl ParsedPacket {
 
     fn parse_ether(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = ethernet::parse_ethernet_frame(data) {
-            self.protocol.push(PacketHeader::Ether(header));
+            self.layers.push(PacketHeader::Ether(header));
             return match header.ethertype {
                 ethernet::EtherType::IPv4 => Ok(self.parse_ip4(content))?,
                 ethernet::EtherType::IPv6 => Ok(self.parse_ip6(content))?,
@@ -114,7 +112,7 @@ impl ParsedPacket {
 
     fn parse_ip4(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = ipv4::parse_ipv4_header(data) {
-            self.protocol.push(PacketHeader::Ipv4(header));
+            self.layers.push(PacketHeader::Ipv4(header));
             self.src_ip = header.source_addr.to_string();
             self.dest_ip = header.dest_addr.to_string();
             return match header.protocol {
@@ -128,7 +126,7 @@ impl ParsedPacket {
 
     fn parse_ip6(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = ipv6::parse_ipv6_header(data) {
-            self.protocol.push(PacketHeader::Ipv6(header));
+            self.layers.push(PacketHeader::Ipv6(header));
             self.src_ip = header.source_addr.to_string();
             self.dest_ip = header.dest_addr.to_string();
             return match header.next_header {
@@ -142,7 +140,7 @@ impl ParsedPacket {
 
     fn parse_tcp(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = tcp::parse_tcp_header(data) {
-            self.protocol.push(PacketHeader::Tcp(header.clone()));
+            self.layers.push(PacketHeader::Tcp(header.clone()));
             self.src_port = header.source_port.to_string();
             self.dest_port = header.dest_port.to_string();
             return Ok(self);
@@ -152,20 +150,29 @@ impl ParsedPacket {
 
     fn parse_udp(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = udp::parse_udp_header(data) {
-            self.protocol.push(PacketHeader::Udp(header));
+            self.layers.push(PacketHeader::Udp(header));
             self.src_port = header.source_port.to_string();
             self.dest_port = header.dest_port.to_string();
             return Ok(self);
         }
         Err(())
     }
+
+    pub fn meta(&self) -> (String, String, String, String) {
+        (
+            self.src_ip.clone(),
+            self.dest_ip.clone(),
+            self.src_port.clone(),
+            self.dest_port.clone(),
+        )
+    }
 }
 
-#[test]
-fn parse_print_test() {
-    let mut parser = Parser::new_for_device();
-    parser.parse(10);
-    for pckt in parser.packets {
-        eprintln!("{:?}", pckt);
+#[tokio::test]
+async fn parse_print_test() {
+    let mut parser = Parser {};
+    let mut receiver = parser.parse().await;
+    while let Some(pac) = receiver.recv().await {
+        eprintln!("{:?}", pac.meta());
     }
 }
