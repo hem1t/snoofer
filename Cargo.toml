@@ -1,0 +1,14 @@
+[package]
+name = "snooffer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dioxus = "0.4.3"
+dioxus-desktop = "0.4.3"
+pcap = "1.1.0"
+pktparse = "0.7.1"
+pretty_assertions = "1.4.0"
+tokio-stream = "0.1.14"
