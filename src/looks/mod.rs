@@ -1,4 +1,4 @@
-use crate::parser::{self, ParsedPacket, Parser};
+use crate::parser::{Parser, ParsedPacket};
 use dioxus::prelude::*;
 
 #[component]
@@ -19,7 +19,7 @@ pub fn MainApp(cx: Scope) -> Element {
 
         async move {
             let mut parser = Parser {};
-            let mut receiver = parser.parse_from_device().await;
+            let mut receiver = parser.parse_from_device("tcp port 443").await;
             while let Some(pac) = receiver.recv().await {
                 parsed_packets.write().push(pac);
             }
