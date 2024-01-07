@@ -2,40 +2,68 @@
 mod parser_packet;
 
 pub use parser_packet::*;
+use tokio::sync::mpsc::Receiver;
 
+use std::{
+    sync::{
+        mpsc::{self, Sender},
+        Arc, Mutex,
+    },
+    time::Duration,
+};
 use std::path::Path;
 
-use tokio::sync::{mpsc, mpsc::Receiver};
+use pcap::{Capture, Device};
 
-use pcap::Capture;
+pub enum ParserCommand {
+    Start,
+    Stop,
+}
 
 pub struct Parser {
-    // TODO: store a sender to command parse tokio thread to stop
+    command_tx: Arc<Sender<ParserCommand>>,
+    packet_rx: Arc<Mutex<Receiver<ParsedPacket>>>,
     // TODO: figure out to store Packet<'a> w/o interfering with capture in parse
+    //      this is required so, can store in file, after it is done parsing.
 }
 
 impl Parser {
-    pub async fn parse_from_device(&mut self, filter: &str) -> Receiver<ParsedPacket>{
-        let mut capture = Capture::from_device("wlo1").unwrap().open().unwrap();
+    pub fn new_for_device(device: impl Into<Device>, filter: &str) -> Self {
+        let mut capture = Capture::from_device(device).unwrap().open().unwrap();
         let _ = capture.filter(filter, true);
 
-        let (tx, rx) = mpsc::channel::<ParsedPacket>(10);
+        let (ctx, crx) = mpsc::channel::<ParserCommand>();
+        let (ptx, prx) = tokio::sync::mpsc::channel::<ParsedPacket>(1);
 
-        tokio::spawn(async move {
-            while let Ok(pac) = capture.next_packet() {
-                // TODO: stop capturing when command stop is recieved.
-                if let Ok(pac) = ParsedPacket::from_packet(pac) {
-                    // TODO: store the packets before sending.
-                    let _ = tx.send(pac).await;
+        std::thread::spawn(move || {
+            if let Ok(ParserCommand::Start) = crx.recv() {
+                while let Ok(pac) = capture.next_packet() {
+                    if let Ok(pac) = ParsedPacket::from_packet(pac) {
+                        let _ = ptx.blocking_send(pac);
+                    }
+                    if let Ok(ParserCommand::Stop) = crx.recv_timeout(Duration::from_millis(1)) {
+                        break;
+                    }
                 }
             }
         });
 
-        rx
+        Self {
+            packet_rx: Arc::new(Mutex::new(prx)),
+            command_tx: Arc::new(ctx),
+        }
     }
 
-    pub fn stop(&mut self) {
-        todo!()
+    pub fn stop(&self) {
+        let _ = self.command_tx.send(ParserCommand::Stop);
+    }
+
+    pub fn start(&self) {
+        let _ = self.command_tx.send(ParserCommand::Start);
+    }
+
+    pub async fn recv(&self) -> Option<ParsedPacket> {
+        self.packet_rx.lock().unwrap().recv().await
     }
 
     pub fn save_to_file(&mut self, _path: &Path) {
@@ -45,9 +73,10 @@ impl Parser {
 
 #[tokio::test]
 async fn parse_print_test() {
-    let mut parser = Parser {};
-    let mut receiver = parser.parse_from_device("").await;
-    while let Some(pac) = receiver.recv().await {
-        eprintln!("{:?}", pac.meta());
+    let parser = Parser::new_for_device("wlo1", "tcp port 443");
+    parser.start();
+    while let Some(pac) = parser.recv().await {
+        println!("{:?}", pac.meta());
     }
+    std::thread::sleep(Duration::from_secs(200));
 }
