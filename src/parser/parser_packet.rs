@@ -29,8 +29,8 @@ pub struct ParsedPacket {
     layers: Vec<PacketHeader>,
     length: u32,
     ts: String,
-    data: Vec<u8>,
-    packet_header: pcap::PacketHeader,
+    // data: Vec<u8>,
+    // packet_header: pcap::PacketHeader,
 }
 
 impl ParsedPacket {
@@ -43,15 +43,15 @@ impl ParsedPacket {
             src_port: String::new(),
             dest_ip: String::new(),
             dest_port: String::new(),
-            data: packet.data.to_vec(),
-            packet_header: *packet.header,
+            // data: packet.data.to_vec(),
+            // packet_header: *packet.header,
         }
         .parse_ether(packet.data)?)
     }
 
-    pub fn to_packet<'a>(&'a self) -> pcap::Packet<'a> {
-        pcap::Packet::new(&self.packet_header, &self.data)
-    }
+    // pub fn to_packet<'a>(&'a self) -> pcap::Packet<'a> {
+    //     pcap::Packet::new(&self.packet_header, &self.data)
+    // }
 
     fn parse_ether(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((content, header)) = ethernet::parse_ethernet_frame(data) {

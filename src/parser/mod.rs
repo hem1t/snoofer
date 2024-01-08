@@ -26,6 +26,7 @@ pub struct Parser {
     packets: Vec<ParsedPacket>,
 }
 
+
 impl Parser {
     pub fn new_for_device(device: impl Into<Device>, filter: &str) -> Self {
         let device = device.into().clone();
@@ -37,21 +38,19 @@ impl Parser {
         std::thread::spawn(move || {
             let mut capture = Capture::from_device(device).unwrap().open().unwrap();
             let _ = capture.filter(filter.as_str(), true);
+            let mut file = capture.savefile("./temp.pcap").unwrap();
 
-            if let Ok(ParserCommand::Start) = crx.recv() {
-                println!("Started capturing!");
-                loop {
-                    if let Ok(pac) = capture.next_packet() {
-                        if let Ok(pac) = ParsedPacket::from_packet(pac) {
-                            let _ = ptx.blocking_send(pac);
-                        }
+            'start: while let Ok(ParserCommand::Start) = crx.recv() {
+                while let Ok(pac) = capture.next_packet() {
+                    file.write(&pac); // write to temp
+                    if let Ok(pac) = ParsedPacket::from_packet(pac) {
+                        let _ = ptx.blocking_send(pac);
                     }
                     if let Ok(ParserCommand::Stop) = crx.recv_timeout(Duration::from_millis(1)) {
                         println!("Stopped listening!");
-                        break;
+                        break 'start;
                     }
                 }
-                println!("Exited Loop!");
             }
         });
 
@@ -71,11 +70,24 @@ impl Parser {
     }
 
     pub async fn recv(&self) -> Option<ParsedPacket> {
-         self.packet_rx.lock().unwrap().recv().await
+        self.packet_rx.lock().unwrap().recv().await
     }
 
-    pub fn save_to_file(&mut self, _path: &Path) {
-        todo!()
+    pub fn save_to_file(&mut self, path: &Path) {
+        // let mut file = Capture::dead(Linktype::ETHERNET)
+        //     .unwrap()
+        //     .savefile(path)
+        //     .unwrap();
+        // for pac in packets {
+        //     file.write(&pac.to_packet());
+        // }
+        std::fs::copy("./temp.pcap", path).expect("Couldn't copy the file.");
+    }
+}
+
+impl Drop for Parser {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file("./temp.pcap");
     }
 }
 
