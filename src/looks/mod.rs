@@ -14,8 +14,8 @@ fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
 
 #[component]
 pub fn MainApp(cx: Scope) -> Element {
-    let parsed_packets = use_ref(cx, || Vec::<ParsedPacket>::new());
-    let parser = use_ref(cx, || Parser::new_for_device("wlo1", ""));
+    let parsed_packets = use_shared_state::<Vec<ParsedPacket>>(cx).unwrap();
+    let parser = use_shared_state::<Parser>(cx).unwrap();
 
     cx.use_hook(|| {
         cx.spawn({
