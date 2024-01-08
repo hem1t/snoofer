@@ -23,12 +23,11 @@ pub fn MainApp(cx: Scope) -> Element {
             to_owned![parsed_packets];
 
             async move {
+                let mut interval = tokio::time::interval(Duration::from_millis(50));
                 while let Some(pac) = parser.read().recv().await {
                     println!("{:?}", pac.meta());
                     parsed_packets.write().push(pac);
-                    // Not sure: if there exists better solution,
-                    // but this line allows user to interact while receiving packets.
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    interval.tick().await;
                 }
             }
         });

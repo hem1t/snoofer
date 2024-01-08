@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-use pcap::PacketCodec;
 
 use pktparse::{
     ethernet::{self, EthernetFrame},
@@ -30,29 +29,11 @@ pub struct ParsedPacket {
     layers: Vec<PacketHeader>,
     length: u32,
     ts: String,
-}
-
-impl PacketCodec for ParsedPacket {
-    type Item = ParsedPacket;
-
-    fn decode(&mut self, packet: pcap::Packet) -> Self::Item {
-        ParsedPacket::from_packet(packet).unwrap()
-    }
+    data: Vec<u8>,
+    packet_header: pcap::PacketHeader,
 }
 
 impl ParsedPacket {
-    pub fn new() -> Self {
-        ParsedPacket {
-            src_ip: String::new(),
-            src_port: String::new(),
-            dest_ip: String::new(),
-            dest_port: String::new(),
-            layers: Vec::new(),
-            length: 0,
-            ts: String::new(),
-        }
-    }
-
     pub fn from_packet(packet: pcap::Packet) -> Result<Self, ()> {
         Ok(ParsedPacket {
             length: packet.header.len,
@@ -62,8 +43,14 @@ impl ParsedPacket {
             src_port: String::new(),
             dest_ip: String::new(),
             dest_port: String::new(),
+            data: packet.data.to_vec(),
+            packet_header: *packet.header,
         }
         .parse_ether(packet.data)?)
+    }
+
+    pub fn to_packet<'a>(&'a self) -> pcap::Packet<'a> {
+        pcap::Packet::new(&self.packet_header, &self.data)
     }
 
     fn parse_ether(mut self, data: &[u8]) -> Result<Self, ()> {
