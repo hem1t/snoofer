@@ -57,6 +57,33 @@ impl Parser {
         }
     }
 
+    pub fn new_from_file(path: &Path, filter: &str) -> Self {
+        let mut capture = Capture::from_file(path).unwrap();
+        let _ = capture.filter(filter, true);
+
+        let (ctx, crx) = mpsc::channel::<ParserCommand>();
+        let (ptx, prx) = tokio::sync::mpsc::channel::<ParsedPacket>(1);
+
+        std::thread::spawn(move || {
+            'start: while let Ok(ParserCommand::Start) = crx.recv() {
+                while let Ok(pac) = capture.next_packet() {
+                    if let Ok(pac) = ParsedPacket::from_packet(pac) {
+                        let _ = ptx.blocking_send(pac);
+                    }
+                    if let Ok(ParserCommand::Stop) = crx.recv_timeout(Duration::from_millis(1)) {
+                        println!("Stopped listening!");
+                        break 'start;
+                    }
+                }
+            }
+        });
+
+        Self {
+            packet_rx: Arc::new(Mutex::new(prx)),
+            command_tx: Arc::new(ctx),
+            packets: Vec::new(),
+        }
+    }
 
     pub fn stop(&self) {
         let _ = self.command_tx.send(ParserCommand::Stop);
