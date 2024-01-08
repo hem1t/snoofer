@@ -26,20 +26,16 @@ pub struct Parser {
     packets: Vec<ParsedPacket>,
 }
 
-
 impl Parser {
     pub fn new_for_device(device: impl Into<Device>, filter: &str) -> Self {
-        let device = device.into().clone();
-        let filter = filter.to_owned();
+        let mut capture = Capture::from_device(device).unwrap().open().unwrap();
+        let _ = capture.filter(filter, true);
+        let mut file = capture.savefile("./temp.pcap").unwrap();
 
         let (ctx, crx) = mpsc::channel::<ParserCommand>();
         let (ptx, prx) = tokio::sync::mpsc::channel::<ParsedPacket>(1);
 
         std::thread::spawn(move || {
-            let mut capture = Capture::from_device(device).unwrap().open().unwrap();
-            let _ = capture.filter(filter.as_str(), true);
-            let mut file = capture.savefile("./temp.pcap").unwrap();
-
             'start: while let Ok(ParserCommand::Start) = crx.recv() {
                 while let Ok(pac) = capture.next_packet() {
                     file.write(&pac); // write to temp
@@ -60,6 +56,7 @@ impl Parser {
             packets: Vec::new(),
         }
     }
+
 
     pub fn stop(&self) {
         let _ = self.command_tx.send(ParserCommand::Stop);
