@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use crate::parser::{ParsedPacket, Parser};
 use dioxus::prelude::*;
-use pcap::Device;
 
 #[component]
 fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
@@ -15,8 +14,8 @@ fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
 
 #[component]
 pub fn MainApp(cx: Scope) -> Element {
-    let parsed_packets = use_ref(cx, || Vec::<ParsedPacket>::new());
-    let parser = use_ref(cx, || Parser::new_for_device(Device::lookup().unwrap().unwrap()));
+    let parsed_packets = use_shared_state::<Vec<ParsedPacket>>(cx).unwrap();
+    let parser = use_shared_state::<Parser>(cx).unwrap();
 
     cx.use_hook(|| {
         cx.spawn({
@@ -24,8 +23,9 @@ pub fn MainApp(cx: Scope) -> Element {
             to_owned![parsed_packets];
 
             async move {
-                let mut interval = tokio::time::interval(Duration::from_millis(50));
-                while let Some(pac) = parser.read().recv().await {
+                let mut interval = tokio::time::interval(Duration::from_millis(100));
+                let receiver = parser.read().get_receiver().clone();
+                while let Some(pac) = receiver.lock().unwrap().recv().await {
                     println!("{:?}", pac.meta());
                     parsed_packets.write().push(pac);
                     interval.tick().await;

@@ -202,10 +202,11 @@ async fn test_filter() {
     let mut parsed_packets = Vec::new();
 
     parser.start();
+    let receiver = parser.get_receiver();
     eprintln!("Starting");
     for i in 0..10 {
         eprintln!("Waiting for {}", i);
-        if let Some(parsed_packet) = parser.recv().await {
+        if let Some(parsed_packet) = receiver.lock().unwrap().recv().await {
             eprintln!("Captured: {:?}", parsed_packet.get_signature());
             parsed_packets.push(parsed_packet);
         }

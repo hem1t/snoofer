@@ -93,8 +93,8 @@ impl Parser {
         let _ = self.command_tx.send(ParserCommand::Start);
     }
 
-    pub async fn recv(&self) -> Option<ParsedPacket> {
-        self.packet_rx.lock().unwrap().recv().await
+    pub fn get_receiver(&self) -> Arc<Mutex<Receiver<ParsedPacket>>> {
+        self.packet_rx.clone()
     }
 
     pub fn save_to_file(&mut self, path: &Path) {
@@ -119,7 +119,8 @@ impl Drop for Parser {
 async fn parse_print_test() {
     let parser = Parser::new_for_device("wlo1");
     parser.start();
-    while let Some(pac) = parser.recv().await {
+    let receiver = parser.get_receiver();
+    while let Some(pac) = receiver.lock().unwrap().recv().await {
         println!("{:?}", pac.meta());
     }
 }
