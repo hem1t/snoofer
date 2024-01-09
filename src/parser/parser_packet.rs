@@ -84,9 +84,9 @@ impl ParsedPacket {
             self.src_ip = header.source_addr.to_string();
             self.dest_ip = header.dest_addr.to_string();
             return match header.protocol {
-                IPProtocol::TCP => Ok(self.parse_tcp(content))?,
-                IPProtocol::UDP => Ok(self.parse_udp(content))?,
-                IPProtocol::ICMP => Err(()), // TODO
+                IPProtocol::TCP => Ok(self.parse_tcp(content)?),
+                IPProtocol::UDP => Ok(self.parse_udp(content)?),
+                IPProtocol::ICMP => Ok(self.parse_icmp(content)?), // TODO
                 _ => Err(()),
             };
         }
@@ -99,9 +99,9 @@ impl ParsedPacket {
             self.src_ip = header.source_addr.to_string();
             self.dest_ip = header.dest_addr.to_string();
             return match header.next_header {
-                IPProtocol::TCP => Ok(self.parse_tcp(content))?,
-                IPProtocol::UDP => Ok(self.parse_udp(content))?,
-                IPProtocol::ICMP => Err(()), // TODO
+                IPProtocol::TCP => Ok(self.parse_tcp(content)?),
+                IPProtocol::UDP => Ok(self.parse_udp(content)?),
+                IPProtocol::ICMP => Ok(self.parse_icmp(content)?), // TODO
                 _ => Err(()),
             };
         }
@@ -190,7 +190,7 @@ impl ParsedPacket {
                 .layers
                 .iter()
                 .map(|l| l.to_str().to_owned())
-                .collect::<Vec<String>>()
+                .collect::<Vec<String>>(),
         );
         sign
     }
