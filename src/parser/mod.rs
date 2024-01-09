@@ -27,9 +27,8 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new_for_device(device: impl Into<Device>, filter: &str) -> Self {
+    pub fn new_for_device(device: impl Into<Device>) -> Self {
         let mut capture = Capture::from_device(device).unwrap().open().unwrap();
-        let _ = capture.filter(filter, true);
         let mut file = capture.savefile("./temp.pcap").unwrap();
 
         let (ctx, crx) = mpsc::channel::<ParserCommand>();
@@ -57,9 +56,8 @@ impl Parser {
         }
     }
 
-    pub fn new_from_file(path: &Path, filter: &str) -> Self {
+    pub fn new_from_file(path: &Path) -> Self {
         let mut capture = Capture::from_file(path).unwrap();
-        let _ = capture.filter(filter, true);
 
         let (ctx, crx) = mpsc::channel::<ParserCommand>();
         let (ptx, prx) = tokio::sync::mpsc::channel::<ParsedPacket>(1);
@@ -117,7 +115,7 @@ impl Drop for Parser {
 
 #[tokio::test]
 async fn parse_print_test() {
-    let parser = Parser::new_for_device("wlo1", "tcp port 443");
+    let parser = Parser::new_for_device("wlo1");
     parser.start();
     while let Some(pac) = parser.recv().await {
         println!("{:?}", pac.meta());
