@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod parser_packet;
+mod filter;
 
 pub use parser_packet::*;
 use tokio::sync::mpsc::Receiver;
