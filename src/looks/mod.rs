@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::parser::{ParsedPacket, Parser};
 use dioxus::prelude::*;
+use pcap::Device;
 
 #[component]
 fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
@@ -14,8 +15,8 @@ fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
 
 #[component]
 pub fn MainApp(cx: Scope) -> Element {
-    let parsed_packets = use_shared_state::<Vec<ParsedPacket>>(cx).unwrap();
-    let parser = use_shared_state::<Parser>(cx).unwrap();
+    let parsed_packets = use_ref(cx, || Vec::<ParsedPacket>::new());
+    let parser = use_ref(cx, || Parser::new_for_device(Device::lookup().unwrap().unwrap()));
 
     cx.use_hook(|| {
         cx.spawn({
@@ -32,7 +33,6 @@ pub fn MainApp(cx: Scope) -> Element {
             }
         });
     });
-
 
     let parser_start = move |_| {
         parser.read().start();
