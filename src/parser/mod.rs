@@ -35,15 +35,16 @@ impl Parser {
         let (ptx, prx) = tokio::sync::mpsc::channel::<ParsedPacket>(1);
 
         std::thread::spawn(move || {
-            'start: while let Ok(ParserCommand::Start) = crx.recv() {
+            if let Ok(ParserCommand::Start) = crx.recv() {
+                println!("Received Start Signal!");
                 while let Ok(pac) = capture.next_packet() {
                     file.write(&pac); // write to temp
                     if let Ok(pac) = ParsedPacket::from_packet(pac) {
                         let _ = ptx.blocking_send(pac);
                     }
                     if let Ok(ParserCommand::Stop) = crx.recv_timeout(Duration::from_millis(1)) {
-                        println!("Stopped listening!");
-                        break 'start;
+                        println!("Received stop signal!");
+                        break;
                     }
                 }
             }

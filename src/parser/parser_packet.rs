@@ -20,6 +20,19 @@ pub enum PacketHeader {
     Ether(EthernetFrame),
 }
 
+impl PacketHeader {
+    fn to_str(&self) -> &str {
+        match self {
+            PacketHeader::ICMP(_) => "icmp",
+            PacketHeader::Tcp(_) => "tcp",
+            PacketHeader::Udp(_) => "udp",
+            PacketHeader::Ipv4(_) => "ip4",
+            PacketHeader::Ipv6(_) => "ip6",
+            PacketHeader::Ether(_) => "ether",
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParsedPacket {
     src_ip: String,
@@ -130,5 +143,82 @@ impl ParsedPacket {
             self.src_port.clone(),
             self.dest_port.clone(),
         )
+    }
+}
+
+impl ParsedPacket {
+    /// Filter
+    pub fn contains(&self, filter: &str) -> bool {
+        if filter.trim().is_empty() {
+            true;
+        }
+
+        let signature = self.get_signature();
+        let filter = filter
+            .split(' ')
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+
+        filter.into_iter().all(|f| signature.contains(&f))
+    }
+
+    // fn dip(&self) -> Vec<&str> {}
+    // fn sip(&self) -> Vec<&str> {}
+
+    fn dport(&self) -> String {
+        format!("dport:{}", self.dest_port)
+    }
+    fn sport(&self) -> String {
+        format!("sport:{}", self.src_port)
+    }
+
+    fn port(&self) -> Vec<String> {
+        vec![
+            format!("port:{}", self.dest_port),
+            format!("port:{}", self.src_port),
+        ]
+    }
+
+    fn get_signature(&self) -> Vec<String> {
+        let mut sign: Vec<String> = Vec::new();
+        //self.dip(), self.sip(),
+        sign.append(&mut self.port());
+        sign.push(self.dport());
+        sign.push(self.sport());
+        sign.append(
+            &mut self
+                .layers
+                .iter()
+                .map(|l| l.to_str().to_owned())
+                .collect::<Vec<String>>()
+        );
+        sign
+    }
+}
+
+#[tokio::test]
+async fn test_filter() {
+    let parser = crate::parser::Parser::new_for_device("wlo1");
+    let mut parsed_packets = Vec::new();
+
+    parser.start();
+    eprintln!("Starting");
+    for i in 0..10 {
+        eprintln!("Waiting for {}", i);
+        if let Some(parsed_packet) = parser.recv().await {
+            eprintln!("Captured: {:?}", parsed_packet.get_signature());
+            parsed_packets.push(parsed_packet);
+        }
+        eprintln!("Received {}", i);
+    }
+    eprintln!("Captured ten");
+    parser.stop();
+    // parser.stop() print in between! Since running on different thread
+    std::thread::sleep(std::time::Duration::from_millis(1));
+
+    for pac in parsed_packets {
+        if pac.contains("port:443 ether") {
+            eprintln!("{:?}", pac.meta());
+        }
     }
 }
