@@ -108,13 +108,7 @@ impl Filter {
             Flag::Sport(pac.src_port),
             Flag::Dport(pac.dest_port),
         ];
-        sig.append(
-            &mut pac
-                .layers
-                .iter()
-                .map(|layer| layer.to_flag())
-                .collect::<Vec<Flag>>(),
-        );
+        sig.extend(pac.layers.iter().map(|layer| layer.to_flag()));
         Self { signature: sig }
     }
 
