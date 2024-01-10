@@ -1,9 +1,10 @@
-use std::{error::Error, fmt::Display, net::IpAddr, str::FromStr};
+use std::str::FromStr;
+use std::{error::Error, fmt::Display, net::IpAddr};
 
 use super::ParsedPacket;
 
 #[derive(Debug)]
-struct FlagError;
+pub struct FlagError;
 
 impl Display for FlagError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -14,7 +15,7 @@ impl Display for FlagError {
 impl Error for FlagError {}
 
 #[derive(PartialEq, Debug)]
-enum Flag {
+pub enum Flag {
     Port(u16),
     Sport(u16),
     Dport(u16),
@@ -56,10 +57,10 @@ impl Flag {
                     "port" => Ok(Flag::Port(val.parse::<u16>()?)),
                     "sport" => Ok(Flag::Sport(val.parse::<u16>()?)),
                     "dport" => Ok(Flag::Dport(val.parse::<u16>()?)),
-                    _ => Ok(Flag::ETHER),
+                    _ => Err(Box::new(FlagError)),
                 }
             }
-            _ => Ok(Flag::ETHER),
+            _ => Err(Box::new(FlagError)),
         }
     }
 
@@ -82,7 +83,7 @@ impl Flag {
 }
 
 #[derive(PartialEq, Debug)]
-struct Filter {
+pub struct Filter {
     signature: Vec<Flag>,
 }
 
@@ -101,18 +102,40 @@ impl Filter {
     }
 
     pub fn from_packet(pac: &ParsedPacket) -> Self {
-        todo!()
+        let mut sig = vec![
+            Flag::Sip(IpAddr::from_str(&pac.src_ip).unwrap()),
+            Flag::Dip(IpAddr::from_str(&pac.dest_ip).unwrap()),
+            Flag::Sport(pac.src_port),
+            Flag::Dport(pac.dest_port),
+        ];
+        sig.append(
+            &mut pac
+                .layers
+                .iter()
+                .map(|layer| layer.to_flag())
+                .collect::<Vec<Flag>>(),
+        );
+        Self { signature: sig }
     }
 
-    pub fn contains(&self, other: &Self) -> bool {
-        todo!()
+    pub fn contains(&self, flag: &Flag) -> bool {
+        match flag {
+            Flag::Port(p) => self.contains(&Flag::Sport(*p)) || self.contains(&Flag::Dport(*p)),
+            Flag::Ip(ip) => self.contains(&Flag::Sip(*ip)) || self.contains(&Flag::Dip(*ip)),
+            s => self.signature.contains(s),
+        }
+    }
+}
+
+impl ParsedPacket {
+    pub fn contains(&self, other: &Filter) -> bool {
+        let pac_sig = Filter::from_packet(&self);
+        other.signature.iter().all(|flag| pac_sig.contains(flag))
     }
 }
 
 #[test]
 fn str_to_filter() {
-    use std::str::FromStr;
-
     let filter = Filter {
         signature: vec![
             Flag::ETHER,

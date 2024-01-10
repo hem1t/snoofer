@@ -10,6 +10,8 @@ use pktparse::{
     udp::{self, UdpHeader},
 };
 
+use crate::parser::filter::*;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum PacketHeader {
     ICMP(IcmpHeader),
@@ -21,27 +23,27 @@ pub enum PacketHeader {
 }
 
 impl PacketHeader {
-    fn to_str(&self) -> &str {
+    pub fn to_flag(&self) -> Flag {
         match self {
-            PacketHeader::ICMP(_) => "icmp",
-            PacketHeader::Tcp(_) => "tcp",
-            PacketHeader::Udp(_) => "udp",
-            PacketHeader::Ipv4(_) => "ip4",
-            PacketHeader::Ipv6(_) => "ip6",
-            PacketHeader::Ether(_) => "ether",
+            PacketHeader::ICMP(_) => Flag::ICMP,
+            PacketHeader::Tcp(_) => Flag::TCP,
+            PacketHeader::Udp(_) => Flag::UDP,
+            PacketHeader::Ipv4(_) => Flag::IP4,
+            PacketHeader::Ipv6(_) => Flag::IP6,
+            PacketHeader::Ether(_) => Flag::ETHER,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParsedPacket {
-    src_ip: String,
-    src_port: String,
-    dest_ip: String,
-    dest_port: String,
-    layers: Vec<PacketHeader>,
-    length: u32,
-    ts: String,
+    pub src_ip: String,
+    pub src_port: u16,
+    pub dest_ip: String,
+    pub dest_port: u16,
+    pub layers: Vec<PacketHeader>,
+    pub length: u32,
+    pub ts: String,
     // data: Vec<u8>,
     // packet_header: pcap::PacketHeader,
 }
@@ -53,9 +55,9 @@ impl ParsedPacket {
             ts: format!("{}.{}", packet.header.ts.tv_sec, packet.header.ts.tv_usec),
             layers: Vec::new(),
             src_ip: String::new(),
-            src_port: String::new(),
+            src_port: 0,
             dest_ip: String::new(),
-            dest_port: String::new(),
+            dest_port: 0,
             // data: packet.data.to_vec(),
             // packet_header: *packet.header,
         }
@@ -111,8 +113,8 @@ impl ParsedPacket {
     fn parse_tcp(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((_, header)) = tcp::parse_tcp_header(data) {
             self.layers.push(PacketHeader::Tcp(header.clone()));
-            self.src_port = header.source_port.to_string();
-            self.dest_port = header.dest_port.to_string();
+            self.src_port = header.source_port;
+            self.dest_port = header.dest_port;
             return Ok(self);
         }
         Err(())
@@ -121,8 +123,8 @@ impl ParsedPacket {
     fn parse_udp(mut self, data: &[u8]) -> Result<Self, ()> {
         if let Ok((_, header)) = udp::parse_udp_header(data) {
             self.layers.push(PacketHeader::Udp(header));
-            self.src_port = header.source_port.to_string();
-            self.dest_port = header.dest_port.to_string();
+            self.src_port = header.source_port;
+            self.dest_port = header.dest_port;
             return Ok(self);
         }
         Err(())
@@ -136,63 +138,13 @@ impl ParsedPacket {
         Err(())
     }
 
-    pub fn meta(&self) -> (String, String, String, String) {
+    pub fn meta(&self) -> (String, String, u16, u16) {
         (
             self.src_ip.clone(),
             self.dest_ip.clone(),
-            self.src_port.clone(),
-            self.dest_port.clone(),
+            self.src_port,
+            self.dest_port,
         )
-    }
-}
-
-impl ParsedPacket {
-    /// Filter
-    pub fn contains(&self, filter: &str) -> bool {
-        if filter.trim().is_empty() {
-            true;
-        }
-
-        let signature = self.get_signature();
-        let filter = filter
-            .split(' ')
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
-
-        filter.into_iter().all(|f| signature.contains(&f))
-    }
-
-    // fn dip(&self) -> Vec<&str> {}
-    // fn sip(&self) -> Vec<&str> {}
-
-    fn dport(&self) -> String {
-        format!("dport:{}", self.dest_port)
-    }
-    fn sport(&self) -> String {
-        format!("sport:{}", self.src_port)
-    }
-
-    fn port(&self) -> Vec<String> {
-        vec![
-            format!("port:{}", self.dest_port),
-            format!("port:{}", self.src_port),
-        ]
-    }
-
-    fn get_signature(&self) -> Vec<String> {
-        let mut sign: Vec<String> = Vec::new();
-        //self.dip(), self.sip(),
-        sign.append(&mut self.port());
-        sign.push(self.dport());
-        sign.push(self.sport());
-        sign.append(
-            &mut self
-                .layers
-                .iter()
-                .map(|l| l.to_str().to_owned())
-                .collect::<Vec<String>>(),
-        );
-        sign
     }
 }
 
@@ -200,6 +152,7 @@ impl ParsedPacket {
 async fn test_filter() {
     let parser = crate::parser::Parser::new_for_device("wlo1");
     let mut parsed_packets = Vec::new();
+    let filter = Filter::from_str("port|443 ether").unwrap();
 
     parser.start();
     let receiver = parser.get_receiver();
@@ -207,7 +160,7 @@ async fn test_filter() {
     for i in 0..10 {
         eprintln!("Waiting for {}", i);
         if let Some(parsed_packet) = receiver.lock().unwrap().recv().await {
-            eprintln!("Captured: {:?}", parsed_packet.get_signature());
+            eprintln!("Captured: {:?}", Filter::from_packet(&parsed_packet));
             parsed_packets.push(parsed_packet);
         }
         eprintln!("Received {}", i);
@@ -218,7 +171,7 @@ async fn test_filter() {
     std::thread::sleep(std::time::Duration::from_millis(1));
 
     for pac in parsed_packets {
-        if pac.contains("port:443 ether") {
+        if pac.contains(&filter) {
             eprintln!("{:?}", pac.meta());
         }
     }
