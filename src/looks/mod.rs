@@ -1,6 +1,9 @@
-use std::time::Duration;
+pub mod logs;
 
-use crate::parser::{ParsedPacket, Parser};
+use crate::{
+    looks::logs::{Log, LogsView},
+    parser::{ParsedPacket, Parser},
+};
 use dioxus::prelude::*;
 
 #[component]
@@ -16,46 +19,13 @@ fn PacketView(cx: Scope, pckt: ParsedPacket) -> Element {
 pub fn MainApp(cx: Scope) -> Element {
     let parsed_packets = use_shared_state::<Vec<ParsedPacket>>(cx).unwrap();
     let parser = use_shared_state::<Parser>(cx).unwrap();
-
-    cx.use_hook(|| {
-        cx.spawn({
-            to_owned![parser];
-            to_owned![parsed_packets];
-
-            async move {
-                let mut interval = tokio::time::interval(Duration::from_millis(100));
-                let receiver = parser.read().get_receiver().clone();
-                while let Some(pac) = receiver.lock().unwrap().recv().await {
-                    println!("{:?}", pac.meta());
-                    parsed_packets.write().push(pac);
-                    interval.tick().await;
-                }
-            }
-        });
-    });
-
-    let parser_start = move |_| {
-        parser.read().start();
-    };
-
-    let parser_stop = move |_| {
-        parser.read().stop();
-    };
-
-    let packets = parsed_packets
-        .read()
-        .clone()
-        .into_iter()
-        .map(|p| rsx!(PacketView { pckt: p.clone() }));
+    let logger = use_shared_state::<Vec<Log>>(cx).unwrap();
 
     render!(
         button {
-            onclick: parser_start,
-            "start"
+            onclick: move |_| logger.write().push(Log(String::from("Logging"))),
+            "log"
         },
-        button {
-            onclick: parser_stop,
-            "stop"
-        },
-        packets)
+        LogsView {}
+    )
 }
