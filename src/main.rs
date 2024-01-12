@@ -1,6 +1,8 @@
 mod looks;
 mod parser;
 
+use looks::*;
+
 use dioxus::prelude::*;
 use pcap::Device;
 
@@ -24,5 +26,15 @@ fn App(cx: Scope) -> Element {
     // logger
     use_shared_state_provider(cx, || Vec::<Log>::new());
 
-    render!("Hello", looks::MainApp {})
+    render!(
+        style {
+            include_str!("styles.css")
+        },
+        Head {}
+        PacketsWindow {}
+        // TODO: put packetDetails and LogView in tabs
+        // where packetDetails will be at default
+        PacketDetailWindow {}
+        LogsView {}
+    )
 }

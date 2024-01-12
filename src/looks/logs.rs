@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 pub struct Log(pub String);
-
+// TODO: open logs as a slide
 #[component]
 pub fn LogsView(cx: Scope) -> Element {
     let logs = use_shared_state::<Vec<Log>>(cx).unwrap();
