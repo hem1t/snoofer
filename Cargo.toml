@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.79"
 async-stream = "0.3.5"
 dioxus = "0.4.3"
 dioxus-desktop = "0.4.3"

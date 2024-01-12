@@ -1,18 +1,9 @@
+use std::net::IpAddr;
 use std::str::FromStr;
-use std::{error::Error, fmt::Display, net::IpAddr};
+
+use anyhow::bail;
 
 use super::ParsedPacket;
-
-#[derive(Debug)]
-pub struct FlagError;
-
-impl Display for FlagError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FlagError")
-    }
-}
-
-impl Error for FlagError {}
 
 #[derive(PartialEq, Debug)]
 pub enum Flag {
@@ -31,7 +22,7 @@ pub enum Flag {
 }
 
 impl Flag {
-    pub fn from_str(s: &str) -> Result<Flag, Box<dyn Error>> {
+    pub fn from_str(s: &str) -> anyhow::Result<Flag> {
         match s.to_lowercase().as_str() {
             "icmp" => Ok(Flag::ICMP),
             "ip4" => Ok(Flag::IP4),
@@ -40,14 +31,14 @@ impl Flag {
             "udp" => Ok(Flag::UDP),
             "ether" => Ok(Flag::ETHER),
             s if s.contains('|') => {
-                let mut s = s.split('|');
+                let mut sr = s.split('|');
 
-                let Some(flag) = s.next() else {
-                    return Err(Box::new(FlagError));
+                let Some(flag) = sr.next() else {
+                    bail!("{s}");
                 };
 
-                let Some(val) = s.next() else {
-                    return Err(Box::new(FlagError));
+                let Some(val) = sr.next() else {
+                    bail!("{s}");
                 };
 
                 match flag.to_lowercase().as_str() {
@@ -57,10 +48,10 @@ impl Flag {
                     "port" => Ok(Flag::Port(val.parse::<u16>()?)),
                     "sport" => Ok(Flag::Sport(val.parse::<u16>()?)),
                     "dport" => Ok(Flag::Dport(val.parse::<u16>()?)),
-                    _ => Err(Box::new(FlagError)),
+                    _ => bail!("{flag}"),
                 }
             }
-            _ => Err(Box::new(FlagError)),
+            _ => bail!("{s}"),
         }
     }
 
@@ -88,16 +79,11 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn from_str(s: &str) -> Result<Self, &str> {
+    pub fn from_str(s: &str) -> anyhow::Result<Self> {
         let mut signature = Vec::new();
         for flag in s.split(' ').into_iter() {
-            if let Ok(flag) = Flag::from_str(flag) {
-                signature.push(flag);
-            } else {
-                return Err(flag);
-            }
+            signature.push(Flag::from_str(flag)?);
         }
-
         Ok(Self { signature })
     }
 
