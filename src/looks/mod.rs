@@ -11,22 +11,11 @@ pub use packet_detail_window::*;
 use dioxus::prelude::*;
 use pcap::Device;
 
-use crate::parser::{ParsedPacket, Parser};
+use crate::parser::ParserSelector;
 
 
 #[component]
 pub fn MainApp(cx: Scope) -> Element {
-    // Device list
-    use_shared_state_provider(cx, || Device::list().unwrap());
-    // parsed_packets
-    use_shared_state_provider(cx, || Vec::<ParsedPacket>::new());
-    // parser
-    use_shared_state_provider(cx, || {
-        Parser::new_for_device(Device::lookup().unwrap().unwrap())
-    });
-    // logger
-    use_shared_state_provider(cx, || Vec::<Log>::new());
-
     render!(
         style {
             //include_str!("")
@@ -37,5 +26,52 @@ pub fn MainApp(cx: Scope) -> Element {
         // where packetDetails will be at default
         PacketDetailWindow {}
         LogsView {}
+    )
+}
+
+#[component]
+pub fn EntryOptionsPage(cx: Scope) -> Element {
+    let parser = use_shared_state::<ParserSelector>(cx).unwrap();
+    let def_device = Device::lookup().unwrap().unwrap();
+    let msg = use_state(cx, || "");
+
+    render!(
+        style {
+            include_str!("styles/entry_page.css")
+        },
+        div {
+
+            id: "entry-options-page",
+            div {
+                id: "entry-page-msg",
+                "{msg}"
+            },
+            label { "Select the source: " },
+            button {
+                class: "option-button",
+                onclick: move |_| {
+                    if let Some(file) = rfd::FileDialog::new().add_filter("Pcap files: ", &["pcap"]).pick_file() {
+                        parser.write().select_file(&file.to_path_buf());
+                    } else {
+                        msg.set("Warn invalid file or file not selected");
+                    }
+                },
+                "Select from file"
+            },
+            button {
+                class: "option-button",
+                onclick: move |_| {
+                    parser.write().select_device(&def_device.name);
+                },
+                div {
+                    id: "device-option-label",
+                    label {"Open device: "},
+                    label {
+                        class: "device-name",
+                        "{def_device.name}"
+                    }
+                }
+            }
+        }
     )
 }

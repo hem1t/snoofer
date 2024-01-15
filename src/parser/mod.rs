@@ -5,7 +5,7 @@ mod parser_packet;
 pub use parser_packet::*;
 use tokio::sync::mpsc::Receiver;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{
     sync::{
         mpsc::{self, Sender},
@@ -15,6 +15,28 @@ use std::{
 };
 
 use pcap::{Capture, Device};
+
+pub struct ParserSelector {
+    parser: Option<Parser>,
+}
+
+impl ParserSelector {
+    pub fn new() -> Self {
+        Self { parser: None }
+    }
+
+    pub fn select_file(&mut self, path: &PathBuf) {
+        self.parser = Some(Parser::new_from_file(&path));
+    }
+
+    pub fn select_device(&mut self, dev_name: &str) {
+        self.parser = Some(Parser::new_for_device(dev_name));
+    }
+
+    pub fn is_parser_avail(&self) -> bool {
+        dbg!(self.parser.is_some())
+    }
+}
 
 pub enum ParserCommand {
     Start,

@@ -5,39 +5,28 @@ use looks::*;
 
 use dioxus::prelude::*;
 
+use crate::parser::ParserSelector;
+
 fn main() {
     dioxus_desktop::launch(App)
 }
 
 #[allow(non_snake_case)]
 fn App(cx: Scope) -> Element {
+    use_shared_state_provider(cx, || ParserSelector::new());
+    let parser_selector = use_shared_state::<ParserSelector>(cx).unwrap();
+
+    let page = if parser_selector.read().is_parser_avail() {
+        rsx!(MainApp {})
+    } else {
+        rsx!(EntryOptionsPage {})
+    };
+
     render!(
         style {
-            include_str!("styles.css")
-        }
-        EntryOptionsPage{}
+            include_str!("styles/main.css")
+        },
+        page
     )
 }
 
-#[component]
-pub fn EntryOptionsPage(cx: Scope) -> Element {
-    // TODO: create datalist and also list the option of devices
-    render!(
-        div {
-            id: "entry-options-page",
-            div {
-                input {
-                    id: "select-device-input",
-                    r#type: "text",
-                    placeholder: "Select from device",
-                }
-                button {
-                    id: "select-device-proceed-button",
-                    img {
-                        src: "assests/proceed.png"
-                    }
-                }
-            }
-        }
-    )
-}
