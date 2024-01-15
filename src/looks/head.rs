@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use pcap::Device;
 
 #[component]
 pub fn Head(cx: Scope) -> Element {
@@ -6,15 +7,16 @@ pub fn Head(cx: Scope) -> Element {
         // upper head to choose source
         div {
             display: "block",
+            margin: "auto",
             OpenFile {},
-            OpenDevice {}
+            // OpenDevice {}
         }
         // lower head select filter and savefile
         div {
             // savefile
             input {
                 r#type: "file"
-            }
+            },
             input {
                 r#type: "text",
                 placeholder: "Filter search"
@@ -35,7 +37,9 @@ pub fn Head(cx: Scope) -> Element {
 #[component]
 pub fn OpenFile(cx: Scope) -> Element {
     render!(
-        button {
+        input {
+            r#type: "file",
+            font_size: "15px",
             "Select from file!"
         }
     )
@@ -43,17 +47,23 @@ pub fn OpenFile(cx: Scope) -> Element {
 
 #[component]
 pub fn OpenDevice(cx: Scope) -> Element {
+    let devices = Device::list().unwrap();
+    let options = devices.into_iter().map(|device| {
+        rsx!(
+            option {
+                value: "{device.name}",
+                "{device.name}"
+            }
+        )
+    });
+
     render! (
         select {
-            name: "Devices",
+            id: "devices",
+            name: "devices",
             required: true,
             // load options from Device::list()
-            option {
-                value: "wlo1",
-            },
-            option {
-                value: "file",
-            }
+            options,
         }
     )
 }
